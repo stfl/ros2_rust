@@ -7,6 +7,11 @@ use crate::serialized_message::SerializedMessage;
 pub struct SerializedSubscription {
     pub(crate) handle: Arc<NodeHandle>,
     pub(crate) sub: rcl_subscription_t,
+    // Keeps the `rosidl_typesupport_c` library loaded for as long as the
+    // subscription lives: `sub` was initialized with a type support pointer that
+    // points into this library, so unloading it earlier would dangle.
+    #[allow(dead_code)]
+    pub(crate) type_support_library: Arc<libloading::Library>,
 }
 
 unsafe impl Send for SerializedSubscription {}

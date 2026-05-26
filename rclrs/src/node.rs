@@ -1522,8 +1522,23 @@ impl NodeState {
     ) -> Result<SerializedSubscription, RclrsError> {
         let SubscriptionOptions { topic, qos } = options.into();
 
-        // Use the same typesupport resolution as dynamic messages.
-        let metadata = crate::dynamic_message::DynamicMessageMetadata::new(topic_type)?;
+        // rmw needs the regular `rosidl_typesupport_c` type support to match the
+        // topic type — NOT the introspection type support. This mirrors
+        // `create_dynamic_subscription`; passing the introspection handle makes
+        // rmw_fastrtps reject the subscription ("Type support not from this
+        // implementation"). The library must stay loaded for the subscription's
+        // lifetime, so it is moved into the returned `SerializedSubscription`.
+        let type_support_library = crate::dynamic_message::get_type_support_library(
+            &topic_type.package_name,
+            "rosidl_typesupport_c",
+        )?;
+        let type_support_ptr = unsafe {
+            crate::dynamic_message::get_type_support_handle(
+                type_support_library.as_ref(),
+                "rosidl_typesupport_c",
+                &topic_type,
+            )?
+        };
 
         let mut sub = unsafe { rcl_get_zero_initialized_subscription() };
         let topic_c = std::ffi::CString::new(topic).unwrap();
@@ -1538,7 +1553,7 @@ impl NodeState {
             rcl_subscription_init(
                 &mut sub,
                 &*node,
-                metadata.type_support_ptr(),
+                type_support_ptr,
                 topic_c.as_ptr(),
                 &opts,
             )
@@ -1548,6 +1563,7 @@ impl NodeState {
         Ok(SerializedSubscription {
             handle: Arc::clone(&self.handle),
             sub,
+            type_support_library,
         })
     }
 
