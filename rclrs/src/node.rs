@@ -1543,9 +1543,9 @@ impl NodeState {
         let mut sub = unsafe { rcl_get_zero_initialized_subscription() };
         let topic_c = std::ffi::CString::new(topic).unwrap();
 
-        let _context_lock = self.handle.context_handle.rcl_context.lock().unwrap();
-        let node = self.handle.rcl_node.lock().unwrap();
-        let _lifecycle_lock = ENTITY_LIFECYCLE_MUTEX.lock().unwrap();
+        let _context_lock = self.handle.context_handle.rcl_context.lock()?;
+        let node = self.handle.rcl_node.lock()?;
+        let _lifecycle_lock = ENTITY_LIFECYCLE_MUTEX.lock()?;
 
         unsafe {
             let mut opts = rcl_subscription_get_default_options();
@@ -1577,13 +1577,28 @@ impl NodeState {
     ) -> Result<SerializedPublisher, RclrsError> {
         let crate::PublisherOptions { topic, qos } = options.into();
 
-        let metadata = crate::dynamic_message::DynamicMessageMetadata::new(topic_type)?;
+        // rmw needs the regular `rosidl_typesupport_c` type support to match the
+        // topic type — NOT the introspection type support (same reasoning as
+        // `create_serialized_subscription`). The library must stay loaded for the
+        // publisher's lifetime, so it is moved into the returned `SerializedPublisher`.
+        let type_support_library = crate::dynamic_message::get_type_support_library(
+            &topic_type.package_name,
+            "rosidl_typesupport_c",
+        )?;
+        let type_support_ptr = unsafe {
+            crate::dynamic_message::get_type_support_handle(
+                type_support_library.as_ref(),
+                "rosidl_typesupport_c",
+                &topic_type,
+            )?
+        };
+
         let mut pub_ = unsafe { rcl_get_zero_initialized_publisher() };
         let topic_c = std::ffi::CString::new(topic).unwrap();
 
-        let _context_lock = self.handle.context_handle.rcl_context.lock().unwrap();
-        let node = self.handle.rcl_node.lock().unwrap();
-        let _lifecycle_lock = ENTITY_LIFECYCLE_MUTEX.lock().unwrap();
+        let _context_lock = self.handle.context_handle.rcl_context.lock()?;
+        let node = self.handle.rcl_node.lock()?;
+        let _lifecycle_lock = ENTITY_LIFECYCLE_MUTEX.lock()?;
 
         unsafe {
             let mut opts = rcl_publisher_get_default_options();
@@ -1591,7 +1606,7 @@ impl NodeState {
             rcl_publisher_init(
                 &mut pub_,
                 &*node,
-                metadata.type_support_ptr(),
+                type_support_ptr,
                 topic_c.as_ptr(),
                 &opts,
             )
@@ -1601,6 +1616,7 @@ impl NodeState {
         Ok(SerializedPublisher {
             handle: Arc::clone(&self.handle),
             pub_,
+            type_support_library,
         })
     }
 }

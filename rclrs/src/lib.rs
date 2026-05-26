@@ -207,6 +207,11 @@ mod worker;
 #[cfg(test)]
 mod test_helpers;
 
+/// Low-level FFI bindings to the underlying ROS 2 `rcl`/`rmw` C API.
+///
+/// These are exposed so that downstream crates can build functionality that
+/// `rclrs` does not yet wrap safely. Everything here is `unsafe` to use and has
+/// no stability guarantees.
 pub mod rcl_bindings;
 
 pub use action::*;
